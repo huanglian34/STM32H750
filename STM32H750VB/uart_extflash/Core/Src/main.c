@@ -88,15 +88,36 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  printf("STM32H750VB Demo. \r\n");
-  volatile uint32_t i = 0;
+  SystemCoreClockUpdate();
+
+  printf("\r\n");
+  printf("====================================================\r\n");
+  printf("  *** STM32H750VBT6 External Flash App Running ***  \r\n");
+  printf("====================================================\r\n");
+  printf(" [Build Time]   : %s %s\r\n", __DATE__, __TIME__);
+  printf(" [System Clock] : %lu MHz\r\n", (unsigned long)(SystemCoreClock / 1000000));
+  printf(" [Execution PC] : 0x%08lX (QSPI XIP Region)\r\n", (unsigned long)&main);
+  printf(" [Vector VTOR]  : 0x%08lX\r\n", (unsigned long)SCB->VTOR);
+  printf(" [Current MSP]  : 0x%08lX (AXI SRAM)\r\n", (unsigned long)__get_MSP());
+  printf(" [MCU 96-bit UID]: %08lX-%08lX-%08lX\r\n",
+         (unsigned long)HAL_GetUIDw0(),
+         (unsigned long)HAL_GetUIDw1(),
+         (unsigned long)HAL_GetUIDw2());
+  printf(" [Target Flash] : Winbond W25Q64JVSIQ (8MB, Quad-SPI)\r\n");
+  printf("====================================================\r\n\r\n");
+
+  uint32_t count = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    printf("i = 0x%x \r\n", i++);
+    printf("[App Alive] Tick: %8lu ms | Counter: %lu (0x%lX)\r\n",
+           (unsigned long)HAL_GetTick(),
+           (unsigned long)count,
+           (unsigned long)count);
+    count++;
     HAL_Delay(1000);
     /* USER CODE END WHILE */
 
