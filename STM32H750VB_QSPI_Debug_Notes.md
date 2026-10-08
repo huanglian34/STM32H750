@@ -395,16 +395,123 @@ LR_IROM1 0x90000000 0x00800000  {    ; 加载区：外部 Flash，基地址 0x90
 ### 8.5 完整开发与调试工作流 (Workflow)
 
 ```
-[步骤 1: 制作算法]
-打开 flashalgo_flm -> 编译生成 .FLM 算法 -> 复制到 Keil 算法目录 (只需做一次)
-        |
-        v
-[步骤 2: 编写并烧录 APP]
-打开 uart_extflash -> 添加外部 FLM 算法 -> 按 F8 烧录进外部 Flash (0x90000000)
-        |
-        v
-[步骤 3: 启动运行]
-打开 boot_sram -> 按 Ctrl + F5 灌入 RAM -> 按 F5 运行 -> 开启 4 线映射并跳转进入 APP
+[模式 A: 开发调试阶段 (RAM 运行 Bootloader)]
+步骤 1: 制作算法 (flashalgo_flm -> 编译生成 .FLM 算法 -> 复制到 Keil 算法目录)
+步骤 2: 烧录 APP (uart_extflash -> 添加外部 FLM 算法 -> 按 F8 烧录进 0x90000000)
+步骤 3: 调试运行 (boot_sram -> 按 Ctrl + F5 灌入 RAM -> 按 F5 运行 -> 跳转进入 APP)
+
+[模式 B: 生产固化阶段 (片内 Flash 固化 Bootloader，上电脱机自启)]
+步骤 1: 固化 Bootloader (boot_sram 改为链接 0x08000000，按 F8 烧录到片内 Flash)
+步骤 2: 外部 Flash 烧录 APP (uart_extflash 按 F8 烧录到 0x90000000)
+步骤 3: 独立脱机运行 (拔掉仿真器，板子重新上电，内部 Bootloader 毫秒级初始化并跳转 APP)
 ```
+
+---
+
+## 9. Bootloader 固化到片内 Flash (0x08000000) 实操与故障排查指南
+
+将 Bootloader 从调试用的 AXI SRAM (`0x24000000`) 迁移并固化到片内 128KB 内部 Flash (`0x08000000`) 时，涉及 Keil 链接机制、内存总线架构以及中断向量重映射等深坑。以下为完整技术原理解析与排查手册：
+
+### 9.1 Keil “Use Memory Layout from Target Dialog” 的机制与区别
+
+在 Keil **Linker** 选项卡中，有一个核心复选框：`Use Memory Layout from Target Dialog`。
+
+* **勾选时（自动模式，推荐）**：
+  Keil 会在后台根据在 **Target** 选项卡中配置的 IROM（Flash）和 IRAM（RAM）范围，**自动生成默认的分散加载链接脚本**。
+  开发者无需手写或维护 `.sct` 分散加载文件。
+* **不勾选时（手动 Scatter 脚本模式）**：
+  Keil 会在链接参数中加入 `--strict --scatter "xxx.sct"`，完全依照用户指定的 `.sct` 文件进行段布局。
+* **踩坑警示（`no default 'Read/Write' range selected`）**：
+  若在 Target 选项卡填入了 IROM/IRAM 的起始地址和大小，但**最左侧的 `default` 复选框没有打勾**，链接器将不知道全局变量和堆栈该默认存放在哪里，从而报出此错误；且由于未勾选自动布局且未指定合法 `.sct`，还会连带报出 `Could not open scatter description file: No such file or directory`。
+* **正确配置**：
+  - **IROM1**：勾选 `default`，Start = `0x08000000`，Size = `0x00020000`（128KB 片内 Flash）
+  - **IRAM2**：勾选 `default`，Start = `0x24000000`，Size = `0x00080000`（512KB AXI SRAM）
+  - **Linker 选项卡**：**勾选** `Use Memory Layout from Target Dialog`。
+
+---
+
+### 9.2 DTCM (`0x20000000`) 与 AXI SRAM (`0x24000000`) 的本质区别
+
+在 STM32H7 系列架构中，配置工程主 RAM 或算法运行内存时，DTCM 与 AXI SRAM 有着本质差异：
+
+| 特性 | DTCM (`0x20000000`) | AXI SRAM (`0x24000000`) |
+| :--- | :--- | :--- |
+| **全称** | **Data Tightly-Coupled Memory** (紧耦合内存) | **AXI System SRAM** (系统总线 SRAM) |
+| **物理位置** | 紧贴在 **Cortex-M7 核心内部** | 挂在 **D1 域 64-bit AXI 交叉开关总线矩阵** |
+| **总线连接** | 64 位专有紧耦合内部总线（直通 CPU 寄存器） | 64 位 AXI 系统互联总线矩阵 |
+| **容量** | 128 KB | 512 KB |
+| **CPU 访问速度** | **0 等待周期（与 CPU 同频 480MHz）** | 极高（约 200~240MHz AXI 时钟，支持 Cache） |
+| **Cache 缓存** | 绕过 D-Cache（天生强一致性） | 经过 D-Cache |
+| **外部主机/调试器访问** | **受限（必须通过 AHBS-to-DTCM 总线桥转接）** | **原生完全开放（调试器 DAP 作为 Bus Master 平等访问）** |
+| **最佳用途** | 高频中断服务栈、极端实时数学算法 | **系统主 RAM、DMA 缓冲区、Flash 算法运行内存** |
+
+* **为什么烧录算法绝不能用 DTCM？**
+  Flash 算法下载时，调试器需要通过 SWD/JTAG 频繁向 RAM 写入待烧录的数据块。调试器 DAP 访问 DTCM 需要经过桥接，当 CPU 复位或时钟未完全配置好时，极易发生总线握手挂死或 Bus Error。而 **AXI SRAM** 是标准系统 RAM，兼容性和稳定性极高。
+  **规则：所有 Flash 算法的 `RAM for Algorithm` 务必配置为 `Start: 0x24000000, Size: 0x10000` 或更大。**
+
+---
+
+### 9.3 片内 Flash 擦除失败（`Erase Failed!`）排查
+
+#### 现象：
+点击 F8 下载片内 Bootloader，状态栏停在 `Erase: 08000000H` 几秒后弹出：
+```text
+Erase Failed!
+Error: Flash Download failed - "Cortex-M7"
+```
+
+#### 诱因与对策：
+1. **STM32H750 片内 Flash 单一扇区特性（Erase Sectors 陷阱）**：
+   STM32H750 片内只有 128KB 内部 Flash，且整块 Flash 就是**一个单一的 128KB 大扇区（Sector 0）**。Keil 自带的片内 Flash 算法在执行扇区擦除（`Erase Sectors`）时，容易因参数匹配问题返回错误。
+   - **解决办法**：在 `Debug -> Settings -> Flash Download` 中，将擦除模式切换为 **`Erase Full Chip`**（全片擦除）。
+2. **总线被未复位的外设/死循环锁死**：
+   若 MCU 之前正运行在 QSPI 内存映射或处于总线异常挂起状态，调试器直接接入可能无法抢占总线。
+   - **解决办法**：在 CMSIS-DAP 的 `Debug` 选项卡中，将 **Connect** 从 `Normal` 修改为 **`under Reset`**，**Reset** 选择 **`SYSRESETREQ`** 或 **`HW RESET`**。或在点击下载的瞬间按住复位键，待开始 Erase 时松开。
+
+---
+
+### 9.4 校验不一致 `Contents mismatch at: 08000000H (Flash=FFH Required=B0H)`
+
+#### 现象：
+```text
+Erase Done.
+Programming Done.
+Contents mismatch at: 08000000H (Flash=FFH Required=B0H) !
+```
+
+#### 诱因与对策：
+- `Flash=FFH` 表明 Flash **已被完全擦除干净**，但数据根本没有真正写入，算法直接假返回了成功。
+- **原因**：`RAM for Algorithm` 配置错误或分配的缓冲区与下载算法内部地址冲突。
+- **解决办法**：
+  1. `RAM for Algorithm` 必须设置：`Start: 0x24000000`，`Size: 0x00010000` (64KB)；
+  2. 优先选用官方算法 **`STM32H7x_128kB`**（Address: `08000000H - 0801FFFFH`）。
+
+---
+
+### 9.5 运行腰斩截断：`printf` 只打印 `STM32H750` 随即死机
+
+#### 现象：
+串口输出 `STM32H750` 后，后半句 `VB Bootloader Starting...` 丢失，后续代码不再执行，MCU 彻底卡死。
+
+#### 致命根因分析：
+在片内 Flash 固化前，该工程作为 SRAM 调试工程使用，在 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/boot_sram/Core/Src/system_stm32h7xx.c) 中硬编码了中断向量表偏移：
+```c
+#if defined(USER_VECT_TAB_ADDRESS)
+  SCB->VTOR = 0x24000000ul; /* 错误！此处被硬编码指向了 SRAM */
+#endif
+```
+- 当程序被固化在 `0x08000000` 内部 Flash 上电启动后，执行了第一条 `printf`；
+- 串口发送过程中，**SysTick（1ms 系统滴答定时器）或外设中断到来**；
+- Cortex-M7 核心根据 `SCB->VTOR` 强制跳转到 `0x24000000` 去寻找中断服务函数向量；
+- 但此时 `0x24000000`（AXI SRAM）中存放的是未初始化的普通全局变量/数据，读取到非法指令地址，**瞬间触发硬件严重故障异常（HardFault）死锁**，串口输出被物理掐断！
+
+#### 最终修复方案：
+修改 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/boot_sram/Core/Src/system_stm32h7xx.c) 第 297 行：
+```c
+#if defined(USER_VECT_TAB_ADDRESS)
+  SCB->VTOR = 0x08000000ul; /* 修复：重新指向片内 Flash 首地址 */
+#endif
+```
+重新编译烧录后，片内 Bootloader 上电即刻正常捕获中断，完整输出日志并平滑跳转至外部 Flash APP 运行。
 
 
