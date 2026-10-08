@@ -419,6 +419,11 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32h7xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_rgb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bsp_rgb.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

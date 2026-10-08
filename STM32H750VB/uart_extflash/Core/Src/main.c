@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "bsp_rgb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -88,7 +89,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  SCB->VTOR = 0x90000000UL; /* Relocate vector table to QSPI XIP base */
   SystemCoreClockUpdate();
+  BSP_RGB_Init();
 
   printf("\r\n");
   printf("====================================================\r\n");
@@ -104,21 +107,38 @@ int main(void)
          (unsigned long)HAL_GetUIDw1(),
          (unsigned long)HAL_GetUIDw2());
   printf(" [Target Flash] : Winbond W25Q64JVSIQ (8MB, Quad-SPI)\r\n");
+  printf(" [Onboard RGB]  : PA1 (R), PC3 (G), PC1 (B)\r\n");
   printf("====================================================\r\n\r\n");
 
-  uint32_t count = 0;
+  /* Color sequence for RGB animation */
+  const RGB_Color_t color_sequence[] = {
+      RGB_COLOR_RED,
+      RGB_COLOR_GREEN,
+      RGB_COLOR_BLUE,
+      RGB_COLOR_YELLOW,
+      RGB_COLOR_PURPLE,
+      RGB_COLOR_CYAN,
+      RGB_COLOR_WHITE,
+      RGB_COLOR_OFF
+  };
+  const uint32_t color_count = sizeof(color_sequence) / sizeof(color_sequence[0]);
+  uint32_t step = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    printf("[App Alive] Tick: %8lu ms | Counter: %lu (0x%lX)\r\n",
+    RGB_Color_t current_color = color_sequence[step % color_count];
+    BSP_RGB_SetColor(current_color);
+
+    printf("[App Alive] Tick: %8lu ms | Step: %-2lu | RGB: %s\r\n",
            (unsigned long)HAL_GetTick(),
-           (unsigned long)count,
-           (unsigned long)count);
-    count++;
-    HAL_Delay(1000);
+           (unsigned long)step,
+           BSP_RGB_GetColorName(current_color));
+
+    step++;
+    HAL_Delay(500); /* 500ms per color transition */
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
