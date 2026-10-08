@@ -66,7 +66,8 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  SCB->VTOR = 0x90000000UL; /* 1. Relocate vector table to QSPI XIP before any interrupts */
+  __enable_irq();            /* 2. Re-enable global interrupts disabled by bootloader */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -89,7 +90,6 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  SCB->VTOR = 0x90000000UL; /* Relocate vector table to QSPI XIP base */
   SystemCoreClockUpdate();
   BSP_RGB_Init();
 

@@ -121,14 +121,14 @@ const char* BSP_RGB_GetColorName(RGB_Color_t color)
 {
     switch (color)
     {
-        case RGB_COLOR_RED:    return "RED (红)";
-        case RGB_COLOR_GREEN:  return "GREEN (绿)";
-        case RGB_COLOR_BLUE:   return "BLUE (蓝)";
-        case RGB_COLOR_YELLOW: return "YELLOW (黄)";
-        case RGB_COLOR_PURPLE: return "PURPLE (紫)";
-        case RGB_COLOR_CYAN:   return "CYAN (青)";
-        case RGB_COLOR_WHITE:  return "WHITE (白)";
+        case RGB_COLOR_RED:    return "RED";
+        case RGB_COLOR_GREEN:  return "GREEN";
+        case RGB_COLOR_BLUE:   return "BLUE";
+        case RGB_COLOR_YELLOW: return "YELLOW";
+        case RGB_COLOR_PURPLE: return "PURPLE";
+        case RGB_COLOR_CYAN:   return "CYAN";
+        case RGB_COLOR_WHITE:  return "WHITE";
         case RGB_COLOR_OFF:    
-        default:               return "OFF (灭)";
+        default:               return "OFF";
     }
 }
