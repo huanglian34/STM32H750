@@ -9,6 +9,7 @@
 4. [RAM 引导器 (boot_sram) 内存映射与跳转分析](#4-ram-引导器-boot_sram-内存映射与跳转分析)
 5. [华邦 (Winbond) Flash 命名规则与后缀讲究 (重点选型参考)](#5-华邦-winbond-flash-命名规则与后缀讲究-重点选型参考)
 6. [后续更换 Flash 操作 Check List](#6-后续更换-flash-操作-check-list)
+7. [进阶实战：4 线 Quad SPI 模式调通实录 (XIP 4倍速)](#7-进阶实战4-线-quad-spi-模式调通实录-xip-4倍速)
 
 ---
 
@@ -197,3 +198,77 @@ STM32H750VBT6 是一款高性价比的 Cortex-M7 单片机（主频高达 480MHz
 | **换为更大容量 16MB**<br>(如 W25Q128JVSIQ) | 1. `FlashDev.c` 中 `DevSize` 改为 `0x01000000`<br>2. `quadspi.c` 中 `FlashSize` 改为 `23`<br>3. 重新编译生成 `.FLM` 替换 | `quadspi.c` 中 `FlashSize` 改为 `23` | 分散加载 `.sct` 中容量可调大至 `0x01000000` |
 | **换为 32MB 芯片**<br>(如 W25Q256JVEIQ) | 1. 所有命令需切入 32 位地址模式 (`0xB7`)<br>2. `FlashSize` 改为 `24`<br>3. 重新编译生成 `.FLM` 替换 | 1. 初始化时发送 `0xB7` 进 4 字节地址<br>2. 内存映射配置改为 `32_BITS` 地址<br>3. `FlashSize` 改为 `24` | 分散加载 `.sct` 容量改大 |
 | **更换为其它品牌**<br>(如 GD25Q64, XT25F64) | 核对该芯片 64KB 块擦除指令（通常也是 `0xD8`）和单线读指令（`0x0B`）即可直接兼容 | 直接兼容 | 无需改动 |
+
+---
+
+## 7. 进阶实战：4 线 Quad SPI 模式调通实录 (XIP 4倍速)
+
+在 1 线模式点亮验证后，为了追求极致的执行效率，我们在 `boot_sram` 中成功调通了 **真正的 4 线 Quad SPI 内存映射模式 (Fast Read Quad I/O, 指令 0xEB)**。以下记录该进阶过程中的关键坑点与最终标准解法。
+
+### 7.1 为什么升级 4 线？
+- **带宽对比**：在相同时钟频率（32MHz）下，1 线带宽约 **4MB/s**，而 4 线带宽达 **16MB/s**（时钟提至 133MHz 时可达 **66MB/s**）。
+- **执行体验**：Cortex-M7 每次取 32 位指令仅需 8 个时钟，CPU 取指总线不再饥饿，程序运行流畅度与内置 Flash 毫无二致。
+
+### 7.2 4 线调试过程中的三大核心陷阱与终极解法
+
+#### 坑点 1：STM32 HAL 官方“无地址指令接收超时”陷阱
+* **现象**：在尝试读取状态寄存器 1（0x05）或状态寄存器 2（0x35）时，调用 `HAL_QSPI_Receive(&hqspi, &sr, ...)` 总是超时卡死。
+* **原因剖析**：
+  在 HAL 库源码中，`HAL_QSPI_Receive()` 依赖向地址寄存器 `AR` 写值来触发通信时钟（`WRITE_REG(hqspi->Instance->AR, addr_reg);`）。然而**读状态寄存器指令是没有地址阶段的（`QSPI_ADDRESS_NONE`）**，写 `AR` 根本无法启动硬件时钟，导致 HAL 库进入死等标志位超时！
+* **终极解法**：
+  **绕开 `HAL_QSPI_Receive`**，直接通过 `0x06` 写使能 -> 发送 `0x01`（Write Status Register）连写 2 个字节（`{0x00, 0x02}`，即 SR1 清除写保护，SR2 的 Bit 1 置 1）。发送操作使用 `HAL_QSPI_Transmit()`，直接推入 `DR` 数据寄存器，完全不受“无地址”影响；接着配合 `AutoPollingMemReady()` 确认烧录完成，彻底解决无地址接收超时的官方陷阱！
+
+#### 坑点 2：前次运行 Memory-Mapped 状态残留导致 `HAL_BUSY`（`WriteEnable failed!`）
+* **现象**：当程序在调试器中按复位重新运行后，第一句写使能报错：`Error: WriteEnable failed!`。
+* **原因剖析**：
+  前次运行进入了内存映射模式（`FMODE = 3`）。在 Keil 调试器重新复位运行程序时，QUADSPI 硬件控制器的 `FMODE` 没有被清零，控制器依然处于 BUSY 状态。此时如果直接调用 `HAL_QSPI_Command()` 发送写使能，HAL 库检测到 `hqspi.State != READY` 直接返回 `HAL_BUSY`。
+* **终极解法**：
+  在 `main()` 开头执行任何 QSPI 操作之前，强制执行硬件终止并复位控制器：
+  ```c
+  QUADSPI->CR |= QUADSPI_CR_ABORT;             // 硬件强制终止当前传输
+  for (volatile int i = 0; i < 5000; i++);
+  QUADSPI->CCR = 0;                             // 清空功能模式
+  QUADSPI->CR &= ~QUADSPI_CR_EN;                // 关闭 QUADSPI
+  HAL_QSPI_DeInit(&hqspi);
+  MX_QUADSPI_Init();                            // 重新初始化，恢复为干净的 READY 状态
+  ```
+
+#### 坑点 3：4 线 `0xEB` 指令的 Continuous Read（免指令模式）误触发
+* **现象**：4 线内存映射读取乱码或无法重入。
+* **原因剖析**：
+  W25Q64 在 0xEB 指令的地址发送完毕后，需要 2 个周期的模式位（M7-M0）。若此时总线电平未送 `0xFF`，芯片可能被误锁入“Continuous Read Mode”。
+* **终极解法**：
+  在配置 `0xEB` 内存映射时，严格送出交替字节并配置对应空周期：
+  ```c
+  sCmd.InstructionMode   = QSPI_INSTRUCTION_1_LINE;
+  sCmd.Instruction       = 0xEB;
+  sCmd.AddressMode       = QSPI_ADDRESS_4_LINES;
+  sCmd.AddressSize       = QSPI_ADDRESS_24_BITS;
+  sCmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_4_LINES;
+  sCmd.AlternateBytesSize= QSPI_ALTERNATE_BYTES_8_BITS;
+  sCmd.AlternateBytes    = 0xFF;  // 必须为 0xFF，禁止 Continuous Read
+  sCmd.DummyCycles       = 4;     // 配合 Alternate Bytes 使用 4 个周期
+  sCmd.DataMode          = QSPI_DATA_4_LINES;
+  ```
+
+### 7.3 最终成功验证日志
+
+经过上述三大加固，`boot_sram` 在 4 线 Quad SPI 模式下一次性顺利点亮并完成 XIP 运行：
+
+```text
+STM32H750VB Bootloader Starting...
+W25Q64 Manufacturer ID: 0xEF, Device ID: 0x16
+Configuring QE bit via instruction 0x01 (SR1=0x00, SR2=0x02)...
+QE bit successfully enabled and programmed!
+Entering Quad (4-line) Memory Mapped Mode (0xEB)...
+Quad Memory Mapped Mode Enabled.
+Vector Table @ 0x90000000:
+  MSP: 0x24000500
+  PC : 0x900002AD
+Jumping to Application...
+
+STM32H750VB Demo. 
+i = 0x0 
+```
+至此，外部 Flash 从烧录算法（FLM）、单线快速读取引导，到 4 线 Quad 高速就地执行（XIP）全栈打通！
+

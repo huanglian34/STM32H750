@@ -92,6 +92,7 @@ extern int QSPI_W25Q64JV_Read(uint8_t *pData, uint32_t ReadAddr, uint32_t Size);
 extern int QSPI_W25Q64JV_PageProgram(uint8_t *pData, uint32_t ReadAddr, uint32_t Size);
 extern int QSPI_W25Q64JV_Write(uint8_t *pData, uint32_t WriteAddr, uint32_t Size);
 extern int QSPI_W25Q64JV_EnableMemoryMappedMode(void);
+extern int QSPI_W25Q64JV_EnableMemoryMappedMode_Quad(void);
 
 #endif
 
@@ -152,7 +153,7 @@ int QSPI_W25Q64JV_WriteEnable(void)
   sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
   sCmd.Instruction = W25Q64JV_WRITE_ENABLE;
 
-  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
+  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_MAX_DELAY) != HAL_OK) return QSPI_ERROR;
 
   /* Configure automatic polling mode to wait for write enabling */
   sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
@@ -168,7 +169,7 @@ int QSPI_W25Q64JV_WriteEnable(void)
   sConf.Interval = 0x10;
   sConf.AutomaticStop = QSPI_AUTOMATIC_STOP_ENABLE;
 
-  if (HAL_QSPI_AutoPolling(&hqspi, &sCmd, &sConf, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
+  if (HAL_QSPI_AutoPolling(&hqspi, &sCmd, &sConf, HAL_MAX_DELAY) != HAL_OK) return QSPI_ERROR;
 
   return QSPI_OK;
 }
@@ -180,13 +181,14 @@ int QSPI_W25Q64JV_Reset(void)
 
   sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
   sCmd.Instruction = W25Q64JV_ENABLE_RESET;
-  if (HAL_QSPI_Command(&hqspi, &sCmd, 0) != HAL_OK) return QSPI_ERROR;
+  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_MAX_DELAY) != HAL_OK) return QSPI_ERROR;
 
   sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
   sCmd.Instruction = W25Q64JV_RESET_DEVICE;
-  if (HAL_QSPI_Command(&hqspi, &sCmd, 0) != HAL_OK) return QSPI_ERROR;
+  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_MAX_DELAY) != HAL_OK) return QSPI_ERROR;
 
-  if (QSPI_W25Q64JV_AutoPollingMemReady(HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != QSPI_OK) return QSPI_ERROR;
+  HAL_Delay(1);
+  if (QSPI_W25Q64JV_AutoPollingMemReady(HAL_MAX_DELAY) != QSPI_OK) return QSPI_ERROR;
 
   return QSPI_OK;
 }
@@ -337,40 +339,50 @@ int QSPI_W25Q64JV_Write(uint8_t *pData, uint32_t WriteAddr, uint32_t Size)
 int QSPI_W25Q64JV_EnableQE(void)
 {
   QSPI_CommandTypeDef sCmd;
-  uint8_t sr2 = 0;
+  uint8_t write_buf[2] = {0x00, 0x02}; // SR1=0x00 (No protect), SR2=0x02 (QE=1)
   memset(&sCmd, 0, sizeof(sCmd));
 
-  /* 1. Read Status Register 2 (0x35) */
-  sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
-  sCmd.Instruction = 0x35;
-  sCmd.DataMode = QSPI_DATA_1_LINE;
-  sCmd.DummyCycles = 0;
-  sCmd.NbData = 1;
-  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
-  if (HAL_QSPI_Receive(&hqspi, &sr2, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
+  printf("Configuring QE bit via instruction 0x01 (SR1=0x00, SR2=0x02)...\r\n");
 
-  printf("W25Q64 Status Register 2: 0x%02X\r\n", sr2);
-
-  /* If QE bit (bit 1) is not set, set it */
-  if ((sr2 & 0x02) == 0)
+  /* Write Enable (0x06) */
+  if (QSPI_W25Q64JV_WriteEnable() != QSPI_OK)
   {
-    printf("Enabling Quad Enable (QE) bit...\r\n");
-    if (QSPI_W25Q64JV_WriteEnable() != QSPI_OK) return QSPI_ERROR;
-
-    sr2 |= 0x02;
-    sCmd.Instruction = 0x31;
-    sCmd.DataMode = QSPI_DATA_1_LINE;
-    sCmd.NbData = 1;
-    if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
-    if (HAL_QSPI_Transmit(&hqspi, &sr2, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK) return QSPI_ERROR;
-    if (QSPI_W25Q64JV_AutoPollingMemReady(HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != QSPI_OK) return QSPI_ERROR;
-    printf("QE bit enabled successfully!\r\n");
+    printf("Error: WriteEnable failed!\r\n");
+    return QSPI_ERROR;
   }
 
+  sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
+  sCmd.Instruction = 0x01; // Write Status Register
+  sCmd.AddressMode = QSPI_ADDRESS_NONE;
+  sCmd.DataMode = QSPI_DATA_1_LINE;
+  sCmd.DummyCycles = 0;
+  sCmd.NbData = 2;
+
+  if (HAL_QSPI_Command(&hqspi, &sCmd, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    printf("Error: Command 0x01 failed!\r\n");
+    return QSPI_ERROR;
+  }
+
+  if (HAL_QSPI_Transmit(&hqspi, write_buf, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    printf("Error: Transmit failed!\r\n");
+    return QSPI_ERROR;
+  }
+
+  /* Wait for completion (Status Register Write Cycle takes up to 15ms) */
+  if (QSPI_W25Q64JV_AutoPollingMemReady(HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != QSPI_OK)
+  {
+    printf("Error: AutoPolling after Write Status Register failed!\r\n");
+    return QSPI_ERROR;
+  }
+  HAL_Delay(15);
+
+  printf("QE bit successfully enabled and programmed!\r\n");
   return QSPI_OK;
 }
 
-int QSPI_W25Q64JV_EnableMemoryMappedMode(void)
+int QSPI_W25Q64JV_EnableMemoryMappedMode_Quad(void)
 {
   QSPI_CommandTypeDef sCmd;
   QSPI_MemoryMappedTypeDef sMapCfg;
@@ -378,14 +390,21 @@ int QSPI_W25Q64JV_EnableMemoryMappedMode(void)
   memset(&sMapCfg, 0, sizeof(sMapCfg));
 
   sCmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
-  sCmd.Instruction = 0x0B; // Fast Read (1-line, 8 dummy cycles)
+  sCmd.Instruction = W25Q64JV_INPUT_FAST_READ; // 0xEB (Fast Read Quad I/O)
 
-  sCmd.AddressMode = QSPI_ADDRESS_1_LINE;
+  sCmd.AddressMode = QSPI_ADDRESS_4_LINES;
   sCmd.AddressSize = QSPI_ADDRESS_24_BITS;
   sCmd.Address = 0;
 
-  sCmd.DataMode = QSPI_DATA_1_LINE;
-  sCmd.DummyCycles = 8;
+  /* Essential: Send Alternate Bytes = 0xFF on 4 lines to prevent entering Continuous Read Mode */
+  sCmd.AlternateByteMode = QSPI_ALTERNATE_BYTES_4_LINES;
+  sCmd.AlternateBytesSize = QSPI_ALTERNATE_BYTES_8_BITS;
+  sCmd.AlternateBytes = 0xFF;
+
+  /* 4 dummy cycles following the 2 cycles of alternate bytes (total 6 wait cycles) */
+  sCmd.DummyCycles = 4;
+
+  sCmd.DataMode = QSPI_DATA_4_LINES;
   sCmd.NbData = 0;
 
   sMapCfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
@@ -478,6 +497,15 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   printf("STM32H750VB Bootloader Starting...\r\n");
+
+  /* Force abort and clean reset QUADSPI peripheral state machine */
+  QUADSPI->CR |= QUADSPI_CR_ABORT;
+  for (volatile int i = 0; i < 5000; i++);
+  QUADSPI->CCR = 0;
+  QUADSPI->CR &= ~QUADSPI_CR_EN;
+  HAL_QSPI_DeInit(&hqspi);
+  MX_QUADSPI_Init();
+
   uint8_t id[4] = {0};
   QSPI_W25Q64JV_Reset();
   if (QSPI_W25Q64JV_DeviceID(id) == QSPI_OK)
@@ -485,23 +513,30 @@ int main(void)
     printf("W25Q64 Manufacturer ID: 0x%02X, Device ID: 0x%02X\r\n", id[0], id[1]);
   }
 
-  /* Reset QSPI hardware state machine */
-  QUADSPI->CCR = QUADSPI->CCR & 0xf7ffffff;
-  QUADSPI->CR = QUADSPI->CR & 0xfffffffe;
+  /* 1. Ensure Quad Enable (QE) bit is permanently set */
+  if (QSPI_W25Q64JV_EnableQE() != QSPI_OK)
+  {
+    printf("Warning: Failed to configure QE bit!\r\n");
+  }
+
+  /* 2. Reset QSPI hardware state machine */
+  QUADSPI->CCR = 0;
+  QUADSPI->CR &= ~QUADSPI_CR_EN;
   MX_QUADSPI_Init();
 
-  /* Software Reset W25Q64 chip */
+  /* 3. Software Reset Flash chip */
   QSPI_W25Q64JV_Reset();
 
-  /* Enable Memory Mapped Mode (1-line 0x0B Fast Read) */
-  if (QSPI_W25Q64JV_EnableMemoryMappedMode() == QSPI_OK)
+  /* 4. Enable Quad (4-line) Memory Mapped Mode (0xEB Fast Read Quad I/O) */
+  printf("Entering Quad (4-line) Memory Mapped Mode (0xEB)...\r\n");
+  if (QSPI_W25Q64JV_EnableMemoryMappedMode_Quad() == QSPI_OK)
   {
-    printf("Memory Mapped Mode Enabled.\r\n");
+    printf("Quad Memory Mapped Mode Enabled.\r\n");
     GoToApp();
   }
   else
   {
-    printf("Error: Failed to Enable Memory Mapped Mode!\r\n");
+    printf("Error: Failed to Enable Quad Memory Mapped Mode!\r\n");
   }
   /* USER CODE END 2 */
 
