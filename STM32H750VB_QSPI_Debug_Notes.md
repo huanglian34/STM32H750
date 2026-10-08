@@ -10,6 +10,7 @@
 5. [华邦 (Winbond) Flash 命名规则与后缀讲究 (重点选型参考)](#5-华邦-winbond-flash-命名规则与后缀讲究-重点选型参考)
 6. [后续更换 Flash 操作 Check List](#6-后续更换-flash-操作-check-list)
 7. [进阶实战：4 线 Quad SPI 模式调通实录 (XIP 4倍速)](#7-进阶实战4-线-quad-spi-模式调通实录-xip-4倍速)
+8. [三大工程运行位置、内存映射与 Keil 设置详解 (极重要)](#8-三大工程运行位置内存映射与-keil-设置详解-极重要)
 
 ---
 
@@ -271,4 +272,139 @@ STM32H750VB Demo.
 i = 0x0 
 ```
 至此，外部 Flash 从烧录算法（FLM）、单线快速读取引导，到 4 线 Quad 高速就地执行（XIP）全栈打通！
+
+---
+
+## 8. 三大工程运行位置、内存映射与 Keil 设置详解 (极重要)
+
+在 STM32H750 外置 Flash 开发中，理解各个工程**代码在物理介质上的存放位置**、**运行时的内存映射 (Memory Map)** 以及 **Keil 的配套设置**，是避免“下载报错”、“跳转 HardFault”和“地址冲突”的核心基石。
+
+### 8.1 三大工程物理定位与运行机制一览表
+
+| 工程名称 | 目标载体 | 代码存放地址 (ROM/Flash) | 数据运行地址 (RAM) | 启动与操作方式 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`flashalgo_flm`**<br>(下载算法) | 编译输出 `.FLM`<br>算法插件 | **无**<br>(仅编译出插件由 Keil 调用) | **`0x24000000`**<br>(AXI SRAM, 临时加载运行) | 不单独烧录。由 Keil 在按 **`F8`** 烧录 `uart_extflash` 时自动搬运到 RAM 中临时执行 |
+| **`boot_sram`**<br>(RAM 引导器) | 内部 AXI SRAM | **`0x24000000`**<br>(AXI SRAM, 占 512KB) | **`0x24000000` ~ `0x24080000`**<br>(数据与代码共用 AXI SRAM) | **不能按 F8 下载！**<br>使用 **`Ctrl + F5`** (Debug) 配合 `debug_sram.ini` 加载到 RAM 后按 **`F5`** 运行 |
+| **`uart_extflash`**<br>(用户 APP) | 外部 QSPI Flash<br>(W25Q64) | **`0x90000000`**<br>(映射到外部 Flash 8MB) | **`0x24000000`**<br>(AXI SRAM) 或 DTCM | 在 Keil 中配置外部算法后，按 **`F8`** (Download) 直接烧录进外部 Flash，通过 XIP 运行 |
+
+---
+
+### 8.2 工程一：`flashalgo_flm` (Keil 外部下载算法)
+
+#### ① 角色与运行原理
+它**不是固化在单片机内部的固件**，而是一个由 Keil 调试器（ST-Link/J-Link）动态加载执行的工具小程序。当您在 APP 工程中点击 `Download (F8)` 时：
+1. Keil 将 `.FLM` 文件注入单片机的 AXI SRAM（`0x24000000`）；
+2. Keil 操控单片机 CPU 执行算法里的 `Init()`、`EraseSector()`、`ProgramPage()` 和 `Verify()`；
+3. 将固件二进制数据写入外部 Flash。写入完成后，单片机复位，算法在 RAM 中的任务结束。
+
+#### ② Keil 核心工程设置
+* **Target 选项卡**：
+  - 不需要配置常规的 IROM/IRAM，通常依赖算法专用的链接脚本。
+* **User 选项卡 (After Build/Rebuild)**：
+  - 必须配置复制命令，将生成的 `axf` 重命名为 `.FLM` 放到 Keil 的 Flash 算法目录中：
+    ```cmd
+    cmd.exe /C copy "flashalgo\flashalgo.axf" "..\..\STM32H750VB_W25Q64JV_Dual.flm"
+    ```
+* **FlashDev.c 核心描述参数**：
+  - `DevAdr = 0x90000000`（外部 Flash 映射基地址）
+  - `DevSize = 0x00800000`（单片 8MB，`0x00800000`）
+  - `SECTOR_END` 扇区大小：`0x10000, 0x000000`（64KB 块）
+
+---
+
+### 8.3 工程二：`boot_sram` (内部 RAM 引导器)
+
+#### ① 角色与运行原理
+负责硬件底层的桥梁：复位外部 Flash、开启 QE 四线模式、建立 `0x90000000` 内存映射，并将中断向量表指向 `0x90000000` 后跳入 APP。它运行在内部高速 AXI SRAM。
+
+#### ② 内存布局与分散加载 (`debug_sram.sct`)
+工程使用专属的分散加载脚本，将代码段和数据段全部指定在 AXI SRAM 内部：
+```sct
+LR_IROM1 0x24000000 0x00080000  {    ; 加载区基地址 0x24000000，大小 512KB
+  RW_IRAM1 0x24000000 0x00080000  {  ; 运行区基地址 0x24000000
+   *.o (RESET, +First)               ; 中断向量表放在 0x24000000 起始
+   *(InRoot$$Sections)
+   .ANY (+RO)                        ; 代码段放 RAM
+   .ANY (+XO)
+   .ANY (+RW +ZI)                    ; 数据段与全局变量放 RAM
+  }
+}
+```
+
+#### ③ Keil 核心工程设置
+* **Linker 选项卡**：
+  - 勾选 `Use Memory Layout from Target Dialog` 取消勾选；
+  - 在 `Scatter File` 中填入：`.\debug_sram.sct`。
+* **Debug 选项卡 (最核心设置)**：
+  - 勾选 `Initialization File`，填入：`.\debug_sram.ini`。
+  - **`debug_sram.ini` 脚本必配内容**：
+    ```ini
+    FUNC void Setup (void) {
+        SP = _RDWORD(0x24000000);        // 读取 0x24000000 作为初始栈顶
+        PC = _RDWORD(0x24000004);        // 读取 0x24000004 作为初始入口 PC
+        XPSR = 0x01000000;               // 设置状态寄存器
+        _WDWORD(0xE000ED08, 0x24000000); // 设置 SCB->VTOR 向量表偏移
+    }
+    LOAD %L INCREMENTAL                  // 将 axf 直接下载灌入 RAM
+    Setup();                             // 执行 Setup() 设置 PC 与 SP
+    ```
+* **⚠️ 关键操作禁忌**：
+  - **严禁按 `F8` (Download)**：因为 `0x24000000` 是 RAM 地址，Keil 没有针对 RAM 地址的 Flash 烧录算法，按 F8 会报 `No Algorithm found for 24000000H`。
+  - **正确操作**：按 **`Ctrl + F5`** 进入调试状态，Keil 会执行 ini 脚本将代码灌入 RAM，然后按 **`F5`** 全速运行即可完成引导跳转！
+
+---
+
+### 8.4 工程三：`uart_extflash` (外部 Flash 应用程序 APP)
+
+#### ① 角色与运行原理
+用户的最终主程序。代码存放在外部 Flash 中，CPU 取指令通过 QUADSPI 控制器的硬件 AXI 总线实时读取执行（XIP 就地执行），全局变量与栈运行在内部 AXI SRAM。
+
+#### ② 内存布局与分散加载 (`uart_extflash.sct`)
+```sct
+LR_IROM1 0x90000000 0x00800000  {    ; 加载区：外部 Flash，基地址 0x90000000，容量 8MB
+  ER_IROM1 0x90000000 0x00800000  {  ; 执行区：代码段运行在 0x90000000 (XIP 就地执行)
+   *.o (RESET, +First)               ; APP 向量表放在 0x90000000 起始
+   *(InRoot$$Sections)
+   .ANY (+RO)
+   .ANY (+XO)
+  }
+  RW_IRAM1 0x24000000 0x00080000  {  ; 数据区：全局变量/静态变量在内部 AXI SRAM (512KB)
+   .ANY (+RW +ZI)
+  }
+}
+```
+
+#### ③ Keil 核心工程设置
+* **Target 选项卡**：
+  - **IROM1**：Start = `0x90000000`，Size = `0x00800000`（勾选 Startup）
+  - **IRAM1**：Start = `0x24000000`，Size = `0x00080000`（512KB AXI SRAM）
+* **Debug -> Settings -> Flash Download 选项卡 (关键配置)**：
+  - **Programming Algorithm (算法列表)**：
+    - 点击 `Add`，选中添加之前生成的 `STM32H750VB_W25Q64JV_Dual` 外部算法；
+    - 算法属性显示：Address Range = `90000000H - 907FFFFFH`，Size = `8M`。
+  - **RAM for Algorithm (算法运行内存配置)**：
+    - **Start**: `0x24000000`（指向 AXI SRAM）
+    - **Size**: **`0x40000` (256KB)** ⚠️ *千万不能填默认的 32KB(0x8000)，否则会报 `Cannot Load Flash Programming Algorithm`*！
+  - 勾选 `Verify`（烧录后自动比对校验）。
+* **操作方式**：
+  - 点击编译（Build）；
+  - 直接按 **`F8` (Download)**，Keil 自动调用外部算法擦除、烧录并校验 `0x90000000` 外部 Flash！
+
+---
+
+### 8.5 完整开发与调试工作流 (Workflow)
+
+```
+[步骤 1: 制作算法]
+打开 flashalgo_flm -> 编译生成 .FLM 算法 -> 复制到 Keil 算法目录 (只需做一次)
+        |
+        v
+[步骤 2: 编写并烧录 APP]
+打开 uart_extflash -> 添加外部 FLM 算法 -> 按 F8 烧录进外部 Flash (0x90000000)
+        |
+        v
+[步骤 3: 启动运行]
+打开 boot_sram -> 按 Ctrl + F5 灌入 RAM -> 按 F5 运行 -> 开启 4 线映射并跳转进入 APP
+```
+
 
