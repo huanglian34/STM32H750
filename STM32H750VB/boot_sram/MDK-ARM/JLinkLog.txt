@@ -1,0 +1,135 @@
+T3DB4 021:579.308   SEGGER J-Link V7.82 Log File
+T3DB4 021:579.436   DLL Compiled: Oct 13 2022 13:32:51
+T3DB4 021:579.460   Logging started @ 2023-04-11 14:57
+T3DB4 021:579.517 - 23.481ms
+T3DB4 021:579.552 JLINK_SetWarnOutHandler(...)
+T3DB4 021:579.571 - 0.027ms
+T3DB4 021:579.593 JLINK_OpenEx(...)
+T3DB4 021:581.820   Firmware: J-Link J-Link V21 compiled Jun 26 2017 10:35:16
+T3DB4 021:582.438   Firmware: J-Link J-Link V21 compiled Jun 26 2017 10:35:16
+T3DB4 021:596.672   Hardware: V1.00
+T3DB4 021:596.728   S/N: 776875035
+T3DB4 021:596.743   OEM: SEGGER
+T3DB4 021:596.757   Feature(s): None
+T3DB4 021:600.133   TELNET listener socket opened on port 19021
+T3DB4 021:608.090   WEBSRV WEBSRV_Init(): Starting webserver thread(s)
+T3DB4 021:608.416   WEBSRV Webserver running on local port 19080
+T3DB4 021:616.171 - 36.618ms returns "O.K."
+T3DB4 021:616.236 JLINK_GetEmuCaps()
+T3DB4 021:616.263 - 0.034ms returns 0x98EA5A33
+T3DB4 021:616.286 JLINK_TIF_GetAvailable(...)
+T3DB4 021:616.738 - 0.468ms
+T3DB4 021:616.771 JLINK_SetErrorOutHandler(...)
+T3DB4 021:616.783 - 0.017ms
+T3DB4 021:616.806 JLINK_ExecCommand("ProjectFile = "C:\Users\u\Desktop\h7\h750vb\boot_sram\MDK-ARM\JLinkSettings.ini"", ...). 
+T3DB4 021:619.098 - 2.314ms returns 0x00
+T3DB4 021:619.159 JLINK_ExecCommand("Device = STM32H750VBTx", ...). 
+T3DB4 021:619.712   Flash bank @ 0x90000000: SFL: Parsing sectorization info from ELF file
+T3DB4 021:619.755     FlashDevice.SectorInfo[0]: .SectorSize = 0x00010000, .SectorStartAddr = 0x00000000
+T3DB4 021:619.789   OFL: Init() N/A
+T3DB4 021:619.818   OFL: UnInit() N/A
+T3DB4 021:619.847   OFL: EraseSector() N/A
+T3DB4 021:619.880   OFL: ProgramPage() N/A
+T3DB4 021:619.908   OFL: EraseChip() N/A
+T3DB4 021:619.936   OFL: BlankCheck() N/A
+T3DB4 021:619.961   OFL: Verify() N/A
+T3DB4 021:619.987   OFL: SEGGER_FL_Erase() present @ offset 0x000005F9
+T3DB4 021:620.012   OFL: SEGGER_FL_Program() present @ offset 0x000005D5
+T3DB4 021:620.037   OFL: SEGGER_FL_Read() N/A
+T3DB4 021:620.062   OFL: SEGGER_OPEN_Read() N/A
+T3DB4 021:620.087   OFL: SEGGER_FL_CalcCRC() present @ offset 0x00000629
+T3DB4 021:620.113   OFL: SEGGER_FL_Start() present @ offset 0x00000641
+T3DB4 021:620.138   OFL: SEGGER_FL_GetFlashInfo() present @ offset 0x000001CD
+T3DB4 021:620.165   OFL: SEGGER_FL_Verify() N/A
+T3DB4 021:620.192   OFL: SEGGER_FL_CheckBlank() present @ offset 0x00000615
+T3DB4 021:620.218   OFL: SEGGER_FL_Prepare() present @ offset 0x00000301
+T3DB4 021:620.246   OFL: SEGGER_FL_Restore() present @ offset 0x000004E5
+T3DB4 021:620.274   OFL: SEGGER_FL_EraseChip() N/A
+T3DB4 021:625.508   Device "STM32H750VB" selected.
+T3DB4 021:626.201 - 7.026ms returns 0x00
+T3DB4 021:626.249 JLINK_ExecCommand("DisableConnectionTimeout", ...). 
+T3DB4 021:626.280 - 0.014ms returns 0x01
+T3DB4 021:626.310 JLINK_GetHardwareVersion()
+T3DB4 021:626.330 - 0.028ms returns 10000
+T3DB4 021:626.357 JLINK_GetDLLVersion()
+T3DB4 021:626.375 - 0.027ms returns 78200
+T3DB4 021:626.401 JLINK_GetOEMString(...)
+T3DB4 021:626.439 JLINK_GetFirmwareString(...)
+T3DB4 021:626.469 - 0.039ms
+T3DB4 021:626.507 JLINK_GetDLLVersion()
+T3DB4 021:626.531 - 0.032ms returns 78200
+T3DB4 021:626.558 JLINK_GetCompileDateTime()
+T3DB4 021:626.581 - 0.034ms
+T3DB4 021:627.226 JLINK_GetFirmwareString(...)
+T3DB4 021:627.259 - 0.042ms
+T3DB4 021:627.287 JLINK_GetHardwareVersion()
+T3DB4 021:627.306 - 0.027ms returns 10000
+T3DB4 021:627.331 JLINK_GetSN()
+T3DB4 021:627.351 - 0.028ms returns 776875035
+T3DB4 021:627.373 JLINK_GetOEMString(...)
+T3DB4 021:627.396 JLINK_TIF_Select(JLINKARM_TIF_SWD)
+T3DB4 021:629.241 - 1.879ms returns 0x00
+T3DB4 021:629.299 JLINK_HasError()
+T3DB4 021:629.326 JLINK_SetSpeed(10000)
+T3DB4 021:629.694 - 0.396ms
+T3DB4 021:630.279 JLINK_HasError()
+T3DB4 021:630.313 JLINK_SetResetType(JLINKARM_RESET_TYPE_NO_RESET)
+T3DB4 021:630.331 - 0.027ms returns JLINKARM_RESET_TYPE_NORMAL
+T3DB4 021:630.352 JLINK_Reset()
+T3DB4 021:630.739   ConfigTargetSettings() start
+T3DB4 021:630.774    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 021:630.799   ConfigTargetSettings() end
+T3DB4 021:737.838   Failed to attach to CPU. Trying connect under reset.
+T3DB4 022:271.025   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 022:431.429   
+  ***** Error: 
+T3DB4 022:431.479   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 022:483.621   Connect fallback: Reset via Reset pin & Connect.
+T3DB4 022:543.609   ConfigTargetSettings() start
+T3DB4 022:543.655    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 022:543.678   ConfigTargetSettings() end
+T3DB4 022:650.395   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 022:809.594   
+  ***** Error: 
+T3DB4 022:809.645   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 022:861.082 - 1230.755ms
+T3DB4 022:861.148 JLINK_GetId()
+T3DB4 022:861.791   ConfigTargetSettings() start
+T3DB4 022:861.832    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 022:861.856   ConfigTargetSettings() end
+T3DB4 022:969.458   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 023:129.279   
+  ***** Error: 
+T3DB4 023:129.347   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 023:180.779   Connect fallback: Reset via Reset pin & Connect.
+T3DB4 023:240.118   ConfigTargetSettings() start
+T3DB4 023:240.167    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 023:240.190   ConfigTargetSettings() end
+T3DB4 023:347.314   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 023:506.434   
+  ***** Error: 
+T3DB4 023:506.493   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 023:557.178 - 696.068ms returns 0x00000000
+T3DB4 023:557.258 JLINK_GetId()
+T3DB4 023:557.921   ConfigTargetSettings() start
+T3DB4 023:557.964    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 023:557.987   ConfigTargetSettings() end
+T3DB4 023:665.652   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 023:825.526   
+  ***** Error: 
+T3DB4 023:825.587   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 023:877.087   Connect fallback: Reset via Reset pin & Connect.
+T3DB4 023:936.599   ConfigTargetSettings() start
+T3DB4 023:936.643    J-Link Script File: Executing ConfigTargetSettings()
+T3DB4 023:936.668   ConfigTargetSettings() end
+T3DB4 024:044.322   STM32 (connect): Can not attach to CPU. Trying connect under reset.
+T3DB4 024:203.104   
+  ***** Error: 
+T3DB4 024:203.178   STM32: Connecting to CPU via connect under reset failed.
+T3DB4 024:254.675 - 697.449ms returns 0x00000000
+T3DB4 024:256.956 JLINK_GetFirmwareString(...)
+T3DB4 024:256.981 - 0.030ms
+T3DB4 025:598.734 JLINK_Close()
+T3DB4 025:609.067 - 10.371ms
+T3DB4 025:609.117   
+T3DB4 025:609.136   Closed

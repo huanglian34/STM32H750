@@ -1,0 +1,46 @@
+# ====================================================================
+# Keil MDK Project Git Ignore File
+# ====================================================================
+
+# User-specific / GUI settings (keep project files .uvprojx and .uvoptx)
+*.uvguix.*
+*.uvgui.*
+*.uvgui.*.*
+
+# Compilation / Object Output Files
+*.o
+*.d
+*.crf
+*.htm
+*.dep
+*.lnp
+*.lst
+*.map
+*.axf
+*.bin
+*.hex
+*.build_log.htm
+
+# Output Directories
+Listings/
+Objects/
+DebugConfig/
+RTE/
+
+# Keil temporary files
+*.bak
+*.__i
+*.i
+*.pack
+*.orig
+
+# IDE and OS files
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
