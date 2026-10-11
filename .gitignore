@@ -1,13 +1,15 @@
 # ====================================================================
-# Keil MDK Project Git Ignore File
+# Keil MDK & STM32 Embedded Projects
 # ====================================================================
 
-# User-specific / GUI settings (keep project files .uvprojx and .uvoptx)
+# User-specific GUI settings & window layouts (keep .uvprojx and .uvoptx)
 *.uvguix.*
 *.uvgui.*
-*.uvgui.*.*
+*.uvgui*
+*.uvopt
+*.uvoptx.bak
 
-# Compilation / Object Output Files
+# Compilation & Object Output Files
 *.o
 *.d
 *.crf
@@ -20,27 +22,76 @@
 *.bin
 *.hex
 *.build_log.htm
+*.sct.bak
 
-# Output Directories
+# Keil Output Directories
 Listings/
 Objects/
 DebugConfig/
 RTE/
+**/Listings/
+**/Objects/
+**/DebugConfig/
+**/RTE/
 
-# Keil temporary files
+# Keil & Debugger temporary files
 *.bak
 *.__i
 *.i
 *.pack
 *.orig
+JLinkLog.txt
+*.scvd.bak
 
-# IDE and OS files
+# ====================================================================
+# Rust & Tauri 2.0 (Host Tools / Bootloader GUI)
+# ====================================================================
+
+# Cargo compilation output (heavy build targets)
+target/
+**/target/
+src-tauri/target/
+**/src-tauri/target/
+
+# Cargo temporary & backup files
+*.rs.bk
+*.pdb
+
+# ====================================================================
+# Node.js & Web Frontend (Host GUI)
+# ====================================================================
+
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+.npm/
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Production / local bundles
+dist/
+**/dist/
+
+# ====================================================================
+# IDE & Operating System Files
+# ====================================================================
+
 .vscode/
 .vs/
 .idea/
 *.swp
 *.swo
 *~
+
+# Windows & macOS system metadata
 Thumbs.db
+ehthumbs.db
 Desktop.ini
+$RECYCLE.BIN/
 .DS_Store
+._*

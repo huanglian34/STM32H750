@@ -494,7 +494,7 @@ Contents mismatch at: 08000000H (Flash=FFH Required=B0H) !
 串口输出 `STM32H750` 后，后半句 `VB Bootloader Starting...` 丢失，后续代码不再执行，MCU 彻底卡死。
 
 #### 致命根因分析：
-在片内 Flash 固化前，该工程作为 SRAM 调试工程使用，在 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/boot_sram/Core/Src/system_stm32h7xx.c) 中硬编码了中断向量表偏移：
+在片内 Flash 固化前，该工程作为 SRAM 调试工程使用，在 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/bootloader/Core/Src/system_stm32h7xx.c) 中硬编码了中断向量表偏移：
 ```c
 #if defined(USER_VECT_TAB_ADDRESS)
   SCB->VTOR = 0x24000000ul; /* 错误！此处被硬编码指向了 SRAM */
@@ -506,12 +506,79 @@ Contents mismatch at: 08000000H (Flash=FFH Required=B0H) !
 - 但此时 `0x24000000`（AXI SRAM）中存放的是未初始化的普通全局变量/数据，读取到非法指令地址，**瞬间触发硬件严重故障异常（HardFault）死锁**，串口输出被物理掐断！
 
 #### 最终修复方案：
-修改 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/boot_sram/Core/Src/system_stm32h7xx.c) 第 297 行：
+修改 [system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/bootloader/Core/Src/system_stm32h7xx.c) 第 297 行：
 ```c
 #if defined(USER_VECT_TAB_ADDRESS)
   SCB->VTOR = 0x08000000ul; /* 修复：重新指向片内 Flash 首地址 */
 #endif
 ```
 重新编译烧录后，片内 Bootloader 上电即刻正常捕获中断，完整输出日志并平滑跳转至外部 Flash APP 运行。
+
+---
+
+## 10. 企业级双分区 Bootloader (A/B Dual-Slot) 与防变砖回滚机制
+
+### 10.1 外部 Flash 分区表规划 (W25Q64 8MB NOR Flash)
+
+为支持真正的脱机 OTA 固件升级与防变砖安全回滚，整个 8MB Flash 划分为以下四大功能区：
+
+| 分区名称 | 物理偏移 | 内存映射地址 (XIP) | 大小 | 扇区数 | 用途说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Slot A (Active)** | `0x000000` | `0x90000000` | 3840 KB (3.75 MB) | 960 | 主应用程序运行区，CPU 默认由此取指执行 |
+| **Slot B (Backup)** | `0x3C0000` | `0x903C0000` | 3840 KB (3.75 MB) | 960 | 固件备份与 OTA 下载暂存区 |
+| **NV-Config** | `0x780000` | `0x90780000` | 4 KB | 1 | Bootloader 关键参数区（启动计数、活动槽、CRC32、自检元数据） |
+| **User Data / FS** | `0x781000` | `0x90781000` | 508 KB | 127 | 预留给用户参数存储或 LittleFS 文件系统 |
+
+### 10.2 防变砖自动回滚机制 (Anti-Brick Rollback)
+
+在工程实践中，APP 固件更新可能会由于代码 Bug 导致运行即崩溃（例如 HardFault、死循环看门狗复位）。
+Bootloader 内置了自动回滚机制：
+1. **启动尝试计数器 (`boot_count`)**：每次 Bootloader 准备跳转进入 APP 前，`boot_count++` 并持久化写入 NV-Config 扇区；
+2. **健康握手确认**：APP 在稳定运行 3~5 秒后，可通过调用 Bootloader 预留的 API 或写回 NV-Config 将 `boot_count` 清零；
+3. **自动回滚触发**：如果 APP 发生致命崩溃导致系统复位，`boot_count` 将累加。一旦达到最大重试限制（默认 3 次），Bootloader 判定当前固件损坏，**立即停止启动，自动调用 `Bootloader_Rollback()` 将备份区 Slot B 的可用固件克隆覆盖至 Slot A，拯救设备免于变砖！**
+
+### 10.3 固件元数据头部 (Firmware Header) 与打包规范
+
+Bootloader 采用 **向后兼容** 设计：
+- **普通原始 Binary**：依然支持 Keil 直接生成的 `.bin`，Bootloader 会校验其栈指针合法性（DTCM/AXI SRAM）与入口地址 Thumb 位；
+- **专业升级安装包**：前置 64 字节安全的元数据 Header：
+  - `magic`：`0x53544D32`（ASCII: `STM2`）
+  - `fw_version`：语义化版本（如 `0x01020000` 对应 `v1.2.0`）
+  - `fw_size`：代码净载荷字节数
+  - `fw_crc32`：全固件 IEEE 802.3 硬件 CRC32
+  - `target_slot`：指定安装目标槽（0: Slot A, 1: Slot B, 0xFF: 任意）
+  - `timestamp`：UNIX 构建时间戳
+  - `header_crc32`：前 60 字节头部自验校验和
+
+### 10.4 固件打包工具 (`tools/firmware_packer.py`) 使用方法
+
+在终端或脚本中执行打包：
+```bash
+# 1. 查看固件信息
+python firmware_packer.py info my_app.bin
+
+# 2. 将普通 Keil bin 打包为安全升级包
+python firmware_packer.py pack app_raw.bin app_pkg.bin --version 1.0.0 --slot a
+
+# 3. 打包为 OTA 暂存升级包
+python firmware_packer.py pack app_raw.bin app_pkg_ota.bin --version 1.0.1 --slot b
+```
+
+### 10.5 交互式控制台 (CLI) 指令集一览
+
+上电 2 秒倒计时内按下任意键进入控制台：
+- `help`：打印完整指令列表
+- `info`：查看系统时钟、Flash 芯片型号、JEDEC ID 及状态寄存器
+- `slots`：查看当前 Slot A、Slot B 状态、大小、CRC32、当前活动槽与启动计数
+- `ymodem [a|b]`：通过串口 Ymodem 协议下载固件至 Slot A（主运行区）或 Slot B（备份区）
+- `backup`：将当前运行区 Slot A 完整克隆备份至 Slot B
+- `restore`：将备份区 Slot B 覆盖还原至 Slot A
+- `verify [a|b]`：全面自检指定槽的向量表与固件 CRC32
+- `config [reset]`：查看当前 NV-Config 参数，或恢复出厂配置
+- `read <offset> <len>`：按十六进制 Hex Dump 查看 Flash 任意地址
+- `erase <offset> <num_sectors>`：手动擦除指定区域扇区
+- `boot [a|b]`：立即切换并运行指定槽
+- `reset`：触发单片机硬件软复位
+
 
 

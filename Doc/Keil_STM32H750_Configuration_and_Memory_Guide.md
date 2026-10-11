@@ -248,7 +248,7 @@ STM32H750 的总线矩阵架构中，普通 DMA 控制器（DMA1、DMA2）物理
   5. 此时 AXI SRAM 中只有普通的变量数据，读出的不是合法 Thumb 指令地址，**CPU 瞬间触发硬件严重故障异常（HardFault）死锁**！串口输出物理掐断！
 
 ### 5.2 `system_stm32h7xx.c` 中 `SCB->VTOR` 的正确配置姿势
-检查 [boot_sram/Core/Src/system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/boot_sram/Core/Src/system_stm32h7xx.c) 的 `SystemInit()` 函数：
+检查 [bootloader/Core/Src/system_stm32h7xx.c](file:///c:/Users/LIAN/Desktop/STM32H750/STM32H750VB/bootloader/Core/Src/system_stm32h7xx.c) 的 `SystemInit()` 函数：
 ```c
   /* Configure the Vector Table location -------------------------------------*/
 #if defined(USER_VECT_TAB_ADDRESS)

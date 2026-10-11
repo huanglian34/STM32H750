@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>boot_sram</TargetName>
+      <TargetName>bootloader</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>6220000::V6.22::ARMCLANG</pCCUsed>
@@ -48,11 +48,11 @@
             <NotGenerated>0</NotGenerated>
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
-          <OutputDirectory>boot_sram\</OutputDirectory>
-          <OutputName>boot_sram</OutputName>
+          <OutputDirectory>bootloader\</OutputDirectory>
+          <OutputName>bootloader</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>0</BrowseInformation>
           <ListingPath></ListingPath>
@@ -132,12 +132,12 @@
             <UseTargetDll>1</UseTargetDll>
             <UseExternalTool>0</UseExternalTool>
             <RunIndependent>0</RunIndependent>
-            <UpdateFlashBeforeDebugging>0</UpdateFlashBeforeDebugging>
+            <UpdateFlashBeforeDebugging>1</UpdateFlashBeforeDebugging>
             <Capability>1</Capability>
             <DriverSelection>4101</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
-          <Flash2>BIN\UL2V8M.DLL</Flash2>
+          <Flash2>BIN\UL2CM3.DLL</Flash2>
           <Flash3>"" ()</Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
@@ -424,6 +424,36 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32h7xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_qspi_w25q.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bsp_qspi_w25q.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_rgb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bsp_rgb.c</FilePath>
+            </File>
+            <File>
+              <FileName>bootloader.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bootloader.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_mpu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/bsp_mpu.c</FilePath>
+            </File>
+            <File>
+              <FileName>ymodem.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/ymodem.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_cli.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/boot_cli.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -545,9 +575,6 @@
               <FilePath>../Core/Src/system_stm32h7xx.c</FilePath>
             </File>
           </Files>
-        </Group>
-        <Group>
-          <GroupName>::CMSIS</GroupName>
         </Group>
       </Groups>
     </Target>

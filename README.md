@@ -12,5 +12,5 @@
   - 📄 **[`Doc/schdoc.pdf`](Doc/schdoc.pdf)**：硬件开发板原理图。
 * 📂 **`STM32H750VB/`**：核心代码工程
   - 🛠️ **`flashalgo_flm/`**：Keil FLM 外部 Flash 下载算法工程（生成 `STM32H750VB_W25Q64JV_Dual.flm`）。
-  - 🚀 **`boot_sram/`**：Bootloader 工程（可链接至片内 Flash `0x08000000` 固化，负责开启 Quad 内存映射并跳转）。
+  - 🚀 **`bootloader/`**：专业级 Bootloader 工程（片内 Flash `0x08000000` 固化，集成智能 QE 判读、堆栈与入口安全校验、RGB 状态指示、开启 4 线 Quad 内存映射并跳转）。
   - 💻 **`uart_extflash/`**：用户应用程序（链接至 `0x90000000`，由外部算法直烧，支持高速 XIP 运行与丰富诊断信息）。

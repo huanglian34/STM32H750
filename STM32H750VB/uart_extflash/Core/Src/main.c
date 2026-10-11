@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <string.h>
 #include "bsp_rgb.h"
 /* USER CODE END Includes */
 
@@ -51,7 +52,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+static void App_ProcessCommands(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -127,18 +128,30 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  printf("{\"type\":\"app_status\",\"app\":\"uart_extflash\",\"slot\":0,\"version\":\"v1.0.0\",\"tick\":%lu,\"clock_mhz\":%lu}\r\n",
+         (unsigned long)HAL_GetTick(),
+         (unsigned long)(SystemCoreClock / 1000000));
+
+  uint32_t last_alive_tick = HAL_GetTick();
+
   while (1)
   {
-    RGB_Color_t current_color = color_sequence[step % color_count];
-    BSP_RGB_SetColor(current_color);
+    /* 实时处理串口指令 (极速响应 jump_boot) */
+    App_ProcessCommands();
 
-    printf("[App Alive] Tick: %8lu ms | Step: %-2lu | RGB: %s\r\n",
-           (unsigned long)HAL_GetTick(),
-           (unsigned long)step,
-           BSP_RGB_GetColorName(current_color));
+    /* 周期性状态与 RGB 呼吸 */
+    if (HAL_GetTick() - last_alive_tick >= 1000)
+    {
+      last_alive_tick = HAL_GetTick();
+      RGB_Color_t current_color = color_sequence[step % color_count];
+      BSP_RGB_SetColor(current_color);
 
-    step++;
-    HAL_Delay(500); /* 500ms per color transition */
+      printf("[App Alive] Tick: %8lu ms | Step: %-2lu | RGB: %s\r\n",
+             (unsigned long)HAL_GetTick(),
+             (unsigned long)step,
+             BSP_RGB_GetColorName(current_color));
+      step++;
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -197,7 +210,64 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void App_ProcessCommands(void)
+{
+  static char cmd_buf[64];
+  static uint8_t cmd_idx = 0;
 
+  /* 清理串口溢出与帧错误标志 */
+  if (USART1->ISR & (USART_ISR_ORE | USART_ISR_FE | USART_ISR_NE))
+  {
+    USART1->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NECF;
+  }
+
+  while (USART1->ISR & USART_ISR_RXNE_RXFNE)
+  {
+    char ch = (char)(USART1->RDR & 0xFF);
+
+    if (cmd_idx < sizeof(cmd_buf) - 1)
+    {
+      cmd_buf[cmd_idx++] = ch;
+      cmd_buf[cmd_idx] = '\0';
+    }
+    else
+    {
+      cmd_idx = 0;
+      cmd_buf[0] = '\0';
+    }
+
+    /* 1. 实时多关键字匹配：只要收到 jump_boot/bootloader/reset 立即复位进入 Bootloader */
+    if (strstr(cmd_buf, "jump_boot") != NULL ||
+        strstr(cmd_buf, "bootloader") != NULL ||
+        strstr(cmd_buf, "reset") != NULL)
+    {
+      printf("\r\n[APP] Received jump command! Resetting MCU to Bootloader in 20ms...\r\n");
+      BSP_RGB_SetColor(RGB_COLOR_RED);
+      HAL_Delay(20);
+      NVIC_SystemReset();
+    }
+
+    /* 2. 换行时解析状态与帮助 */
+    if (ch == '\r' || ch == '\n')
+    {
+      if (strstr(cmd_buf, "status") != NULL || 
+          strstr(cmd_buf, "whoami") != NULL ||
+          strstr(cmd_buf, "json") != NULL ||
+          strstr(cmd_buf, "info") != NULL)
+      {
+        printf("{\"type\":\"app_status\",\"app\":\"uart_extflash\",\"slot\":0,\"version\":\"v1.0.0\",\"tick\":%lu,\"clock_mhz\":%lu}\r\n",
+               (unsigned long)HAL_GetTick(),
+               (unsigned long)(SystemCoreClock / 1000000));
+      }
+      else if (strstr(cmd_buf, "help") != NULL)
+      {
+        printf("\r\n[APP CLI] Available commands: 'jump_boot' (enter bootloader), 'status' (get app status), 'help'\r\n");
+      }
+      cmd_idx = 0;
+      cmd_buf[0] = '\0';
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**

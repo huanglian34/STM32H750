@@ -61,7 +61,7 @@ void MX_USART1_UART_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+  if (HAL_UARTEx_EnableFifoMode(&huart1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -146,7 +146,8 @@ FILE __stdin;
 
 int fputc(int c, FILE *f)
 {
-  HAL_UART_Transmit(&huart1, (uint8_t *)&c, 1, 1000);
+  while ((USART1->ISR & USART_ISR_TXE_TXFNF) == 0);
+  USART1->TDR = (uint8_t)c;
   return (c);
 }
 
@@ -163,7 +164,8 @@ int ferror(FILE *f)
 
 void _ttywrch(int c)
 {
-  HAL_UART_Transmit(&huart1, (uint8_t *)&c, 1, 1000);
+  while ((USART1->ISR & USART_ISR_TXE_TXFNF) == 0);
+  USART1->TDR = (uint8_t)c;
 }
 
 void _sys_exit(int return_code)
